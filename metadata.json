@@ -1,0 +1,7 @@
+{
+  "name": "Yoojo Clone - Service Marketplace",
+  "description": "A comprehensive service marketplace for home services like cleaning, DIY, gardening, and more, inspired by yoojo.fr.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

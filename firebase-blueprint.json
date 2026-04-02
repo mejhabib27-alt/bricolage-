@@ -1,0 +1,120 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the platform, either a client or a jobber.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique identifier for the user." },
+        "name": { "type": "string", "description": "The user's full name." },
+        "email": { "type": "string", "format": "email", "description": "The user's email address." },
+        "role": { "type": "string", "enum": ["client", "jobber", "admin"], "description": "The user's role on the platform." },
+        "bio": { "type": "string", "description": "A short biography for jobbers." },
+        "photoUrl": { "type": "string", "format": "uri", "description": "The user's profile picture URL." },
+        "rating": { "type": "number", "description": "The average rating for jobbers." },
+        "reviewsCount": { "type": "integer", "description": "The total number of reviews for jobbers." },
+        "location": { "type": "string", "description": "The user's general location or city." },
+        "latitude": { "type": "number", "description": "The user's current latitude." },
+        "longitude": { "type": "number", "description": "The user's current longitude." }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "A chat conversation between two users.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique identifier for the conversation." },
+        "participants": { "type": "array", "items": { "type": "string" }, "description": "The UIDs of the users in the conversation." },
+        "lastMessage": { "type": "string", "description": "The text of the last message sent." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "When the conversation was last updated." }
+      },
+      "required": ["id", "participants", "updatedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A single message in a conversation.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique identifier for the message." },
+        "conversationId": { "type": "string", "description": "The ID of the conversation this message belongs to." },
+        "senderId": { "type": "string", "description": "The UID of the user who sent the message." },
+        "text": { "type": "string", "description": "The content of the message." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the message was sent." }
+      },
+      "required": ["id", "conversationId", "senderId", "text", "createdAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "A payment record for a booking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique identifier for the payment." },
+        "bookingId": { "type": "string", "description": "The ID of the booking this payment is for." },
+        "clientId": { "type": "string", "description": "The UID of the client who made the payment." },
+        "jobberId": { "type": "string", "description": "The UID of the jobber who will receive the payment." },
+        "amount": { "type": "number", "description": "The amount paid." },
+        "status": { "type": "string", "enum": ["pending", "completed", "failed"], "description": "The status of the payment." },
+        "method": { "type": "string", "enum": ["card", "wallet", "bank"], "description": "The payment method used." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the payment was made." }
+      },
+      "required": ["id", "bookingId", "clientId", "jobberId", "amount", "status", "createdAt"]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "A type of service offered on the platform.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique identifier for the service." },
+        "category": { "type": "string", "description": "The main category (e.g., Cleaning, DIY)." },
+        "subcategory": { "type": "string", "description": "The subcategory (e.g., Window Cleaning)." },
+        "name": { "type": "string", "description": "The name of the service." },
+        "description": { "type": "string", "description": "A description of what the service entails." },
+        "basePrice": { "type": "number", "description": "The starting price for the service." }
+      },
+      "required": ["id", "category", "name"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "A service request or mission.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique identifier for the booking." },
+        "clientId": { "type": "string", "description": "The UID of the client who requested the service." },
+        "jobberId": { "type": "string", "description": "The UID of the jobber assigned to the service." },
+        "serviceId": { "type": "string", "description": "The ID of the service requested." },
+        "status": { "type": "string", "enum": ["pending", "accepted", "completed", "cancelled"], "description": "The current status of the booking." },
+        "date": { "type": "string", "format": "date-time", "description": "The scheduled date and time for the service." },
+        "location": { "type": "string", "description": "The address or location for the service." },
+        "totalAmount": { "type": "number", "description": "The total cost of the service." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the booking was created." }
+      },
+      "required": ["id", "clientId", "serviceId", "status", "date", "location"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "A review left by a client for a jobber.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique identifier for the review." },
+        "bookingId": { "type": "string", "description": "The ID of the booking this review is for." },
+        "fromId": { "type": "string", "description": "The UID of the user who wrote the review." },
+        "fromName": { "type": "string", "description": "The name of the user who wrote the review." },
+        "toId": { "type": "string", "description": "The UID of the user being reviewed." },
+        "rating": { "type": "integer", "description": "The rating given (1-5)." },
+        "comment": { "type": "string", "description": "The review text." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the review was created." }
+      },
+      "required": ["id", "bookingId", "fromId", "toId", "rating"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": { "schema": "User", "description": "User profiles." },
+    "/services/{id}": { "schema": "Service", "description": "Available service types." },
+    "/bookings/{id}": { "schema": "Booking", "description": "Service bookings and missions." },
+    "/reviews/{id}": { "schema": "Review", "description": "User reviews." },
+    "/conversations/{id}": { "schema": "Conversation", "description": "Chat conversations." },
+    "/messages/{id}": { "schema": "Message", "description": "Chat messages." },
+    "/payments/{id}": { "schema": "Payment", "description": "Payment records." }
+  }
+}

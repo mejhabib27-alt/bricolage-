@@ -1,0 +1,320 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required) - The user's UID
+    //   - name: string (required) - The user's full name
+    //   - email: string (required, format: email) - The user's email address
+    //   - role: string (required, enum: ['client', 'jobber', 'admin']) - The user's role
+    //   - bio: string (optional) - Jobber's biography
+    //   - photoUrl: string (optional, format: uri) - Profile picture URL
+    //   - rating: number (optional) - Average rating
+    //   - reviewsCount: int (optional) - Total reviews
+    //   - location: string (optional) - User's location
+    //   - latitude: number (optional) - Current latitude
+    //   - longitude: number (optional) - Current longitude
+    //
+    // Collection: services
+    // Document ID: {id}
+    // Fields:
+    //   - id: string (required)
+    //   - category: string (required)
+    //   - subcategory: string (optional)
+    //   - name: string (required)
+    //   - description: string (optional)
+    //   - basePrice: number (optional)
+    //
+    // Collection: bookings
+    // Document ID: {id}
+    // Fields:
+    //   - id: string (required)
+    //   - clientId: string (required) - UID of the client
+    //   - jobberId: string (optional) - UID of the assigned jobber
+    //   - serviceId: string (required) - ID of the service
+    //   - status: string (required, enum: ['pending', 'accepted', 'completed', 'cancelled'])
+    //   - date: timestamp (required) - Scheduled date
+    //   - location: string (required) - Service address
+    //   - totalAmount: number (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: reviews
+    // Document ID: {id}
+    // Fields:
+    //   - id: string (required)
+    //   - bookingId: string (required)
+    //   - fromId: string (required) - UID of the reviewer
+    //   - fromName: string (optional) - Name of the reviewer
+    //   - toId: string (required) - UID of the reviewed user
+    //   - rating: int (required, 1-5)
+    //   - comment: string (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: conversations
+    // Document ID: {id}
+    // Fields:
+    //   - id: string (required)
+    //   - participants: list (required) - UIDs of the participants
+    //   - lastMessage: string (optional)
+    //   - updatedAt: timestamp (required)
+    //
+    // Collection: messages
+    // Document ID: {id}
+    // Fields:
+    //   - id: string (required)
+    //   - conversationId: string (required)
+    //   - senderId: string (required)
+    //   - text: string (required)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: payments
+    // Document ID: {id}
+    // Fields:
+    //   - id: string (required)
+    //   - bookingId: string (required)
+    //   - clientId: string (required)
+    //   - jobberId: string (required)
+    //   - amount: number (required)
+    //   - status: string (required, enum: ['pending', 'completed', 'failed'])
+    //   - method: string (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "mejhabib27@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isParticipant(participants) {
+      return isAuthenticated() && request.auth.uid in participants;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'name', 'email', 'role']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             isValidEmail(data.email) &&
+             data.role in ['client', 'jobber', 'admin'] &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() < 1000)) &&
+             (!('photoUrl' in data) || isValidUrl(data.photoUrl)) &&
+             (!('rating' in data) || data.rating is number) &&
+             (!('reviewsCount' in data) || data.reviewsCount is int) &&
+             (!('location' in data) || (data.location is string && data.location.size() < 200)) &&
+             (!('latitude' in data) || data.latitude is number) &&
+             (!('longitude' in data) || data.longitude is number);
+    }
+
+    function isValidBooking(data) {
+      return hasRequiredFields(['id', 'clientId', 'serviceId', 'status', 'date', 'location', 'createdAt']) &&
+             data.id is string &&
+             data.clientId is string &&
+             data.serviceId is string &&
+             data.status in ['pending', 'accepted', 'paid', 'completed', 'cancelled'] &&
+             data.date is timestamp &&
+             data.location is string && data.location.size() > 0 && data.location.size() < 500 &&
+             data.createdAt is timestamp &&
+             (!('jobberId' in data) || data.jobberId is string) &&
+             (!('totalAmount' in data) || data.totalAmount is number) &&
+             (!('acceptedAt' in data) || data.acceptedAt is timestamp) &&
+             (!('completedAt' in data) || data.completedAt is timestamp) &&
+             (!('cancelledAt' in data) || data.cancelledAt is timestamp);
+    }
+
+    function isValidReview(data) {
+      return hasRequiredFields(['id', 'bookingId', 'fromId', 'toId', 'rating', 'createdAt']) &&
+             data.id is string &&
+             data.bookingId is string &&
+             data.fromId is string &&
+             (!('fromName' in data) || (data.fromName is string && data.fromName.size() < 100)) &&
+             data.toId is string &&
+             data.rating is int && data.rating >= 1 && data.rating <= 5 &&
+             (!('comment' in data) || (data.comment is string && data.comment.size() < 2000)) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidConversation(data) {
+      return hasRequiredFields(['id', 'participants', 'updatedAt']) &&
+             data.id is string &&
+             data.participants is list && data.participants.size() >= 2 &&
+             (!('lastMessage' in data) || data.lastMessage is string) &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidMessage(data) {
+      return hasRequiredFields(['id', 'conversationId', 'senderId', 'text', 'createdAt']) &&
+             data.id is string &&
+             data.conversationId is string &&
+             data.senderId is string &&
+             data.text is string && data.text.size() > 0 && data.text.size() < 5000 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidPayment(data) {
+      return hasRequiredFields(['id', 'bookingId', 'clientId', 'jobberId', 'amount', 'status', 'createdAt']) &&
+             data.id is string &&
+             data.bookingId is string &&
+             data.clientId is string &&
+             data.jobberId is string &&
+             data.amount is number && data.amount > 0 &&
+             data.status in ['pending', 'completed', 'failed'] &&
+             (!('method' in data) || data.method in ['card', 'wallet', 'bank']) &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isOwner(uid) && isValidUser(request.resource.data) && request.resource.data.role != 'admin';
+      
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
+        // Admins can do anything
+        isAdmin() || 
+        // Owners can update their profile but can't become admin or stop being admin
+        (isOwner(uid) && (
+          (request.resource.data.role == resource.data.role) || 
+          (resource.data.role != 'admin' && request.resource.data.role in ['client', 'jobber'])
+        ))
+      );
+    }
+
+    match /services/{id} {
+      allow read: if true; // Services are public
+      allow write: if isAdmin();
+    }
+
+    match /bookings/{id} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.clientId || 
+        request.auth.uid == resource.data.jobberId || 
+        (resource.data.status == 'pending' && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'jobber')
+      );
+      
+      allow create: if isAuthenticated() && 
+                    isValidBooking(request.resource.data) && 
+                    request.resource.data.clientId == request.auth.uid &&
+                    request.resource.data.status == 'pending';
+                    
+      allow update: if isAuthenticated() && 
+                    isValidBooking(request.resource.data) && (
+                      // Client can update their own booking (cancel or modify details if pending)
+                      (request.auth.uid == resource.data.clientId && 
+                       request.resource.data.clientId == resource.data.clientId &&
+                       request.resource.data.createdAt == resource.data.createdAt &&
+                       (
+                         // If pending, can change details
+                         (resource.data.status == 'pending') ||
+                         // If accepted, can only cancel
+                         (resource.data.status == 'accepted' && request.resource.data.status == 'cancelled') ||
+                         // Already cancelled or completed, no changes allowed for client
+                         (resource.data.status == request.resource.data.status)
+                       )) ||
+                      
+                      // Jobber can accept a pending mission
+                      (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'jobber' &&
+                       resource.data.status == 'pending' &&
+                       request.resource.data.status == 'accepted' &&
+                       request.resource.data.jobberId == request.auth.uid &&
+                       request.resource.data.clientId == resource.data.clientId &&
+                       request.resource.data.serviceId == resource.data.serviceId &&
+                       request.resource.data.createdAt == resource.data.createdAt) ||
+
+                      // Assigned Jobber can complete the mission
+                      (request.auth.uid == resource.data.jobberId &&
+                       resource.data.status == 'accepted' &&
+                       request.resource.data.status == 'completed' &&
+                       request.resource.data.jobberId == resource.data.jobberId &&
+                       request.resource.data.clientId == resource.data.clientId &&
+                       request.resource.data.serviceId == resource.data.serviceId &&
+                       request.resource.data.createdAt == resource.data.createdAt) ||
+                      
+                      isAdmin()
+                    );
+    }
+
+    match /reviews/{id} {
+      allow read: if true;
+      allow create: if isAuthenticated() && 
+                    isValidReview(request.resource.data) && 
+                    request.resource.data.fromId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /conversations/{id} {
+      allow read: if isParticipant(resource.data.participants);
+      allow create: if isAuthenticated() && 
+                    isValidConversation(request.resource.data) && 
+                    request.auth.uid in request.resource.data.participants;
+      allow update: if isParticipant(resource.data.participants) && 
+                    isValidConversation(request.resource.data);
+    }
+
+    match /messages/{id} {
+      allow read: if isAuthenticated() && 
+                  isParticipant(get(/databases/$(database)/documents/conversations/$(resource.data.conversationId)).data.participants);
+      allow create: if isAuthenticated() && 
+                    isValidMessage(request.resource.data) && 
+                    request.resource.data.senderId == request.auth.uid &&
+                    isParticipant(get(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId)).data.participants);
+    }
+
+    match /payments/{id} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        request.auth.uid == get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data.clientId
+      );
+      allow create: if isAuthenticated() && 
+                    isValidPayment(request.resource.data) && 
+                    request.auth.uid == get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.clientId;
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
